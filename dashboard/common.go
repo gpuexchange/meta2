@@ -25,16 +25,12 @@ type DeviceWorkloadStatus struct {
 	WorkloadStatus      string
 }
 
-type DashboardDevice struct {
-	identifier int
-	status     DeviceWorkloadStatus
-}
-
 type BaseDashboard struct {
 	messageChannel chan DashboardMessage
 	config         map[string]string
-	devices        []DashboardDevice
+	devices        map[string]DeviceWorkloadStatus
 	deviceLock     *sync.Mutex
+	initialized    bool
 	terminated     bool
 }
 
@@ -45,11 +41,16 @@ type Dashboard interface {
 }
 
 func (d *BaseDashboard) Init(config map[string]string) {
-	d.devices = make([]DashboardDevice, 0)
+	d.devices = make(map[string]DeviceWorkloadStatus, 0)
 	d.deviceLock = &sync.Mutex{}
+	d.initialized = true
 }
 
 func (d *BaseDashboard) Launch(group *sync.WaitGroup) (chan DashboardMessage, error) {
+	if (!d.initialized) {
+		d.Init(nil)
+	}
+
 	d.messageChannel = make(chan DashboardMessage)
 	go d.manageLifeCycle(group)
 	return d.messageChannel, nil
@@ -87,17 +88,21 @@ func (d *BaseDashboard) manageLifeCycle(group *sync.WaitGroup) {
 
 func (d *BaseDashboard) removeDevice(identifier string) {
 	d.deviceLock.Lock()
-	fmt.Printf("Removing device %s\n", identifier)
+	delete(d.devices, identifier)
 	d.deviceLock.Unlock()
 }
 
 func (d *BaseDashboard) updateDevice(identifier string, status DeviceWorkloadStatus) {
 	d.deviceLock.Lock()
-	fmt.Printf("Updating device %s with Status %s\n", identifier, status)
+	d.devices[identifier] = status
 	d.deviceLock.Unlock()
 }
 
 func (d *BaseDashboard) Terminate() {
 	d.terminated = true;
 	d.messageChannel <- DashboardMessage{MessageType: Terminate}
+}
+
+func (d *BaseDashboard) render() {
+	println("Base renderer. To be replaced.")
 }
