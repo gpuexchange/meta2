@@ -40,13 +40,19 @@ type BaseDashboard struct {
 
 type Dashboard interface {
 	Init(config map[string]string)
-	Launch() (chan DashboardMessage, error)
+	Launch(group *sync.WaitGroup) (chan DashboardMessage, error)
 	Terminate()
 }
 
 func (d *BaseDashboard) Init(config map[string]string) {
 	d.devices = make([]DashboardDevice, 0)
 	d.deviceLock = &sync.Mutex{}
+}
+
+func (d *BaseDashboard) Launch(group *sync.WaitGroup) (chan DashboardMessage, error) {
+	d.messageChannel = make(chan DashboardMessage)
+	go d.manageLifeCycle(group)
+	return d.messageChannel, nil
 }
 
 func (d *BaseDashboard) manageLifeCycle(group *sync.WaitGroup) {
@@ -74,7 +80,7 @@ func (d *BaseDashboard) manageLifeCycle(group *sync.WaitGroup) {
 			}
 			break
 		default:
-			fmt.Println("Unknown message type %d", message.MessageType)
+			fmt.Printf("Unknown message type %s", string(message.MessageType))
 		}
 	}
 }
