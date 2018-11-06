@@ -1,7 +1,9 @@
 package dashboard
 
 import (
-	"fmt"
+	ui "github.com/gizak/termui"
+	"meta2/core"
+	"sort"
 	"sync"
 )
 
@@ -10,23 +12,65 @@ type CLIDashboard struct {
 }
 
 func (d *CLIDashboard) render() {
-	d.deviceLock.Lock()
-	fmt.Println("Rendering status")
-	for identifier, status := range d.devices {
-		fmt.Printf("Device: %s Status: %s", identifier, status)
-		fmt.Println()
-	}
+	ui.Init()
+	defer ui.Close()
+	table := ui.NewTable()
+	table.FgColor = ui.ColorWhite
+	table.BgColor = ui.ColorDefault
+	table.Height = 25
 
-	fmt.Println()
-	d.deviceLock.Unlock()
+	ui.Body.AddRows(
+		ui.NewRow(ui.NewCol(6, 0, table)),
+	)
+
+	ui.Handle("/timer/1s", func(e ui.Event) {
+		if (d.terminated) {
+			ui.StopLoop()
+		} else {
+			d.deviceLock.Lock()
+			rows := make([][]string, len(d.devices)+1)
+
+			// Header row
+			rows[0] = []string{"Device", "Workload", "Performance", "Status"}
+			//table.BgColors[0] = ui.ColorGreen
+
+			deviceIds := make([]string, 0)
+			for deviceId, _ := range d.devices {
+				deviceIds = append(deviceIds, deviceId)
+			}
+
+			sort.Strings(deviceIds)
+
+			for i, identifier := range deviceIds {
+				status := d.devices[identifier]
+				rows[i+1] = []string{
+					identifier,
+					status.WorkloadName,
+					status.WorkloadPerformance,
+					status.WorkloadStatus,
+				}
+			}
+
+			d.deviceLock.Unlock()
+
+			table.Rows = rows
+			table.Analysis()
+			table.SetSize()
+			table.BgColors[0] = ui.ColorGreen
+
+			ui.Body.Align()
+			ui.Render(ui.Body)
+		}
+	})
+
+	ui.Handle("/sys/kbd/q", func(ui.Event) {
+		d.responseChannel <- core.GlobalEvent{EventType: core.Shutdown}
+	})
+
+	ui.Loop()
 }
 
-func (d *CLIDashboard) Launch(group *sync.WaitGroup) (chan DashboardMessage, error) {
-	go func() {
-		for ; !d.terminated; {
-			d.render()
-			// time.Sleep(time.Duration(1) * time.Second)
-		}
-	}()
-	return d.BaseDashboard.Launch(group)
+func (d *CLIDashboard) Launch(group *sync.WaitGroup, globalEvents chan core.GlobalEvent) (chan DashboardEvent, error) {
+	go d.render()
+	return d.BaseDashboard.Launch(group, globalEvents)
 }

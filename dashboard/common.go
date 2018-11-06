@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"fmt"
+	"meta2/core"
 	"sync"
 )
 
@@ -13,7 +14,7 @@ const (
 	Terminate
 )
 
-type DashboardMessage struct {
+type DashboardEvent struct {
 	MessageType MessageType
 	Identifier  string
 	Status      DeviceWorkloadStatus
@@ -26,17 +27,18 @@ type DeviceWorkloadStatus struct {
 }
 
 type BaseDashboard struct {
-	messageChannel chan DashboardMessage
-	config         map[string]string
-	devices        map[string]DeviceWorkloadStatus
-	deviceLock     *sync.Mutex
-	initialized    bool
-	terminated     bool
+	messageChannel  chan DashboardEvent
+	responseChannel chan core.GlobalEvent
+	config          map[string]string
+	devices         map[string]DeviceWorkloadStatus
+	deviceLock      *sync.Mutex
+	initialized     bool
+	terminated      bool
 }
 
 type Dashboard interface {
 	Init(config map[string]string)
-	Launch(group *sync.WaitGroup) (chan DashboardMessage, error)
+	Launch(group *sync.WaitGroup, globalEvents chan core.GlobalEvent) (chan DashboardEvent, error)
 	Terminate()
 }
 
@@ -46,12 +48,13 @@ func (d *BaseDashboard) Init(config map[string]string) {
 	d.initialized = true
 }
 
-func (d *BaseDashboard) Launch(group *sync.WaitGroup) (chan DashboardMessage, error) {
+func (d *BaseDashboard) Launch(group *sync.WaitGroup, globalEvents chan core.GlobalEvent) (chan DashboardEvent, error) {
 	if (!d.initialized) {
 		d.Init(nil)
 	}
 
-	d.messageChannel = make(chan DashboardMessage)
+	d.messageChannel = make(chan DashboardEvent)
+	d.responseChannel = globalEvents
 	go d.manageLifeCycle(group)
 	return d.messageChannel, nil
 }
@@ -100,7 +103,7 @@ func (d *BaseDashboard) updateDevice(identifier string, status DeviceWorkloadSta
 
 func (d *BaseDashboard) Terminate() {
 	d.terminated = true;
-	d.messageChannel <- DashboardMessage{MessageType: Terminate}
+	d.messageChannel <- DashboardEvent{MessageType: Terminate}
 }
 
 func (d *BaseDashboard) render() {
