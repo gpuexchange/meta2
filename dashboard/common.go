@@ -35,11 +35,13 @@ type BaseDashboard struct {
 	config         map[string]string
 	devices        []DashboardDevice
 	deviceLock     *sync.Mutex
+	terminated     bool
 }
 
 type Dashboard interface {
 	Init(config map[string]string)
-	Launch(incoming chan DashboardMessage) error
+	Launch() (chan DashboardMessage, error)
+	Terminate()
 }
 
 func (d *BaseDashboard) Init(config map[string]string) {
@@ -47,16 +49,29 @@ func (d *BaseDashboard) Init(config map[string]string) {
 	d.deviceLock = &sync.Mutex{}
 }
 
-func (d *BaseDashboard) manageLifeCycle() {
+func (d *BaseDashboard) manageLifeCycle(group *sync.WaitGroup) {
+
+	if group != nil {
+		group.Add(1)
+	}
+
 	channel := d.messageChannel
 	for {
 		message := <-channel
+
+		if (d.terminated && message.MessageType != Terminate) {
+			continue;
+		}
+
 		switch message.MessageType {
 		case UpdateDevice:
 			d.updateDevice(message.Identifier, message.Status)
 		case RemoveDevice:
 			d.removeDevice(message.Identifier)
 		case Terminate:
+			if group != nil {
+				group.Done()
+			}
 			break
 		default:
 			fmt.Println("Unknown message type %d", message.MessageType)
@@ -74,4 +89,9 @@ func (d *BaseDashboard) updateDevice(identifier string, status DeviceWorkloadSta
 	d.deviceLock.Lock()
 	fmt.Printf("Updating device %s with Status %s\n", identifier, status)
 	d.deviceLock.Unlock()
+}
+
+func (d *BaseDashboard) Terminate() {
+	d.terminated = true;
+	d.messageChannel <- DashboardMessage{MessageType: Terminate}
 }
