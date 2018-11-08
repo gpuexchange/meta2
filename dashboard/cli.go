@@ -3,7 +3,6 @@ package dashboard
 import (
 	ui "github.com/gizak/termui"
 	"meta2/core"
-	"sort"
 	"sync"
 )
 
@@ -11,55 +10,57 @@ type CLIDashboard struct {
 	BaseDashboard
 }
 
-func (d *CLIDashboard) render() {
-	ui.Init()
-	defer ui.Close()
+func (d *CLIDashboard) uiRenderer() func() {
 	table := ui.NewTable()
-	table.FgColor = ui.ColorWhite
-	table.BgColor = ui.ColorDefault
-	table.Height = 25
 
 	ui.Body.AddRows(
 		ui.NewRow(ui.NewCol(6, 0, table)),
 	)
 
+	return func() {
+		d.deviceLock.Lock()
+		deviceCount := len(d.devices)
+		rows := make([][]string, deviceCount+1)
+
+		// Header row
+		rows[0] = []string{"Device", "Workload", "Performance", "Status"}
+
+		deviceIds := d.getDeviceIds()
+
+		for index, id := range deviceIds {
+			workload := d.devices[id]
+			rows[index+1] = []string{
+				id,
+				workload.Name,
+				workload.Performance,
+				workload.Status,
+			}
+		}
+
+		d.deviceLock.Unlock()
+
+		table.Rows = rows
+		table.Height = deviceCount*2 + 3
+		table.Analysis()
+		table.SetSize()
+		table.FgColors[0] = ui.ColorGreen
+
+		ui.Body.Align()
+		ui.Render(ui.Body)
+	}
+}
+
+func (d *CLIDashboard) render() {
+	ui.Init()
+	defer ui.Close()
+
+	render := d.uiRenderer()
+
 	ui.Handle("/timer/1s", func(e ui.Event) {
 		if (d.terminated) {
 			ui.StopLoop()
 		} else {
-			d.deviceLock.Lock()
-			rows := make([][]string, len(d.devices)+1)
-
-			// Header row
-			rows[0] = []string{"Device", "Workload", "Performance", "Status"}
-			//table.BgColors[0] = ui.ColorGreen
-
-			deviceIds := make([]string, 0)
-			for deviceId, _ := range d.devices {
-				deviceIds = append(deviceIds, deviceId)
-			}
-
-			sort.Strings(deviceIds)
-
-			for i, identifier := range deviceIds {
-				status := d.devices[identifier]
-				rows[i+1] = []string{
-					identifier,
-					status.WorkloadName,
-					status.WorkloadPerformance,
-					status.WorkloadStatus,
-				}
-			}
-
-			d.deviceLock.Unlock()
-
-			table.Rows = rows
-			table.Analysis()
-			table.SetSize()
-			table.BgColors[0] = ui.ColorGreen
-
-			ui.Body.Align()
-			ui.Render(ui.Body)
+			render()
 		}
 	})
 

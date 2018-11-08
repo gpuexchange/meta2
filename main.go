@@ -48,17 +48,17 @@ func main() {
 	// Demo dashboard
 	for i := 0; i < 3; i++ {
 		go func(deviceIndex int) {
-			identifier := fmt.Sprintf("dev/d%d", deviceIndex)
-			status := dashboard.DeviceWorkloadStatus{
+			id := fmt.Sprintf("dev/d%d", deviceIndex)
+			status := dashboard.DeviceWorkload{
 				"docker/x",
 				"ok",
 				"OK",
 			}
 
 			for i := 0; i < 100; i += rand.Intn(10) + 20 {
-				status.WorkloadPerformance = fmt.Sprintf("%d Units", i)
+				status.Performance = fmt.Sprintf("%d Units", i)
 				dashboardEventChannel <- dashboard.DashboardEvent{
-					dashboard.UpdateDevice, identifier, status,
+					dashboard.UpdateDevice, id, status,
 				}
 
 				time.Sleep(time.Duration(500) * time.Millisecond)
@@ -70,4 +70,6 @@ func main() {
 	<-cleanupChannel
 
 	waitGroup.Wait()
+
+	fmt.Println("Good bye")
 }

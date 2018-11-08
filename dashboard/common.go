@@ -3,6 +3,7 @@ package dashboard
 import (
 	"fmt"
 	"meta2/core"
+	"sort"
 	"sync"
 )
 
@@ -16,21 +17,21 @@ const (
 
 type DashboardEvent struct {
 	MessageType MessageType
-	Identifier  string
-	Status      DeviceWorkloadStatus
+	Id          string
+	Status      DeviceWorkload
 }
 
-type DeviceWorkloadStatus struct {
-	WorkloadName        string
-	WorkloadPerformance string
-	WorkloadStatus      string
+type DeviceWorkload struct {
+	Name        string
+	Performance string
+	Status      string
 }
 
 type BaseDashboard struct {
 	messageChannel  chan DashboardEvent
 	responseChannel chan core.GlobalEvent
 	config          map[string]string
-	devices         map[string]DeviceWorkloadStatus
+	devices         map[string]DeviceWorkload
 	deviceLock      *sync.Mutex
 	initialized     bool
 	terminated      bool
@@ -43,7 +44,7 @@ type Dashboard interface {
 }
 
 func (d *BaseDashboard) Init(config map[string]string) {
-	d.devices = make(map[string]DeviceWorkloadStatus, 0)
+	d.devices = make(map[string]DeviceWorkload, 0)
 	d.deviceLock = &sync.Mutex{}
 	d.initialized = true
 }
@@ -75,9 +76,9 @@ func (d *BaseDashboard) manageLifeCycle(group *sync.WaitGroup) {
 
 		switch message.MessageType {
 		case UpdateDevice:
-			d.updateDevice(message.Identifier, message.Status)
+			d.updateDevice(message.Id, message.Status)
 		case RemoveDevice:
-			d.removeDevice(message.Identifier)
+			d.removeDevice(message.Id)
 		case Terminate:
 			if group != nil {
 				group.Done()
@@ -89,15 +90,28 @@ func (d *BaseDashboard) manageLifeCycle(group *sync.WaitGroup) {
 	}
 }
 
-func (d *BaseDashboard) removeDevice(identifier string) {
+func (d *BaseDashboard) getDeviceIds() []string {
+	deviceIds := make([]string, len(d.devices))
+	index := 0
+	for deviceId, _ := range d.devices {
+		deviceIds[index] = deviceId
+		index++
+	}
+
+	sort.Strings(deviceIds)
+
+	return deviceIds
+}
+
+func (d *BaseDashboard) removeDevice(id string) {
 	d.deviceLock.Lock()
-	delete(d.devices, identifier)
+	delete(d.devices, id)
 	d.deviceLock.Unlock()
 }
 
-func (d *BaseDashboard) updateDevice(identifier string, status DeviceWorkloadStatus) {
+func (d *BaseDashboard) updateDevice(id string, status DeviceWorkload) {
 	d.deviceLock.Lock()
-	d.devices[identifier] = status
+	d.devices[id] = status
 	d.deviceLock.Unlock()
 }
 
